@@ -1,0 +1,104 @@
+#include <Stepper.h>
+#include <Adafruit_NeoPixel.h>
+
+// Stepper motor configuration
+const int stepsPerRevolution = 2048;  // 28BYJ-48 stepper motor steps per revolution
+const int delayPerStepOut = 7;        // Delay per step (ms) for 15-second rotation
+const int delayPerStepIn = 5;         // Delay per step (ms) for 10-second return
+
+// Pin definitions
+const int ledPin = 3;          // WS2812 Data pin
+const int numLEDs = 20;        // Number of LEDs in the strip
+const int stepPin1 = 8;        // ULN2003 IN1
+const int stepPin2 = 10;       // ULN2003 IN2
+const int stepPin3 = 9;        // ULN2003 IN3
+const int stepPin4 = 11;       // ULN2003 IN4
+const int touchPin = 2;        // Touch sensor pin
+
+// Global variables
+int currentSteps = 0;          // Track current position
+bool isMovingForward = false;  // Track if motor is moving forward
+
+// Stepper motor setup
+Stepper myStepper(stepsPerRevolution, stepPin1, stepPin2, stepPin3, stepPin4);
+
+// WS2812 LED setup
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(numLEDs, ledPin, NEO_GRB + NEO_KHZ800);
+
+void setup() {
+  // Initialize the LED strip
+  strip.begin();
+  strip.show();  // Ensure all LEDs are off initially
+  
+  // Set initial stepper motor speed
+  myStepper.setSpeed(15);
+  
+  // Setup touch sensor pin as input
+  pinMode(touchPin, INPUT);
+}
+
+void turnOnLEDs() {
+  for (int i = 0; i < numLEDs; i++) {
+    strip.setPixelColor(i, strip.Color(255, 0, 0));  // Set each LED to red
+  }
+  strip.show();
+}
+
+void turnOffLEDs() {
+  for (int i = 0; i < numLEDs; i++) {
+    strip.setPixelColor(i, strip.Color(0, 0, 0));  // Turn off each LED
+  }
+  strip.show();
+}
+
+void resetToOrigin() {
+  // Turn off LEDs
+  turnOffLEDs();
+  
+  // Move back to origin
+  while (currentSteps > 0) {
+    myStepper.step(1);  // Changed from -1 to 1 since directions are reversed
+    currentSteps--;
+    delay(delayPerStepIn);
+  }
+}
+
+void loop() {
+  // Check for touch reset only during forward movement
+  if (isMovingForward && digitalRead(touchPin) == HIGH) {
+    resetToOrigin();
+    delay(1000);  // Delay before resuming normal operation
+    return;
+  }
+  
+  // Normal operation sequence
+  // Step 1: Turn on all LEDs and rotate forward (now moving -1 instead of 1)
+  turnOnLEDs();
+  isMovingForward = true;
+  
+  for (int i = 0; i < stepsPerRevolution; i++) {
+    // Check for touch reset during forward movement
+    if (digitalRead(touchPin) == HIGH) {
+      resetToOrigin();
+      delay(1000);
+      return;
+    }
+    
+    myStepper.step(-1);  // Changed from 1 to -1
+    currentSteps++;
+    delay(delayPerStepOut);
+  }
+  
+  isMovingForward = false;
+  
+  // Step 2: Turn off LEDs and rotate backward (now moving 1 instead of -1)
+  turnOffLEDs();
+  
+  for (int i = 0; i < stepsPerRevolution; i++) {
+    myStepper.step(1);  // Changed from -1 to 1
+    currentSteps--;
+    delay(delayPerStepIn);
+  }
+  
+  delay(1000);  // 1-second pause between cycles
+}
